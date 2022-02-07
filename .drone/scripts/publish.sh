@@ -21,14 +21,24 @@ git config --global user.email "kavplex@hunterwittenborn.com"
 
 git clone "ssh://mpr@${mpr_url}/tap.git" "tap-mpr"
 
-rm "tap-mpr/PKGBUILD"
-cp "makedeb/PKGBUILD" "tap-mpr/PKGBUILD"
-cd "tap-mpr"
+cd tap-mpr/
+find ./ \
+     -maxdepth 1 \
+     -not -path './' \
+     -not -path './.git' \
+     -exec rm '{}' -rfv \;
+
+cd ../makedeb/
+find ./ \
+    -maxdepth 1 \
+    -exec cp '{}' '../tap-mpr/{}' -Rv \;
+
+cd ../tap-mpr/
 makedeb --printsrcinfo | tee .SRCINFO
 
 package_version="$(cat .SRCINFO | grep 'pkgver' | awk -F ' = ' '{print $2}')"
 package_relationship="$(cat .SRCINFO | grep 'pkgrel' | awk -F ' = ' '{print $2}')"
-git add PKGBUILD .SRCINFO
+git add ./
 git commit -m "Updated version to ${package_version}-${package_relationship}"
 
 git push

@@ -1,51 +1,56 @@
 #!/usr/bin/env bash
+_gen_compreply() {
+    mapfile -t COMPREPLY < <(compgen -W "${1}" -- "${2}")
+}
+
+_pkglist_compreply() {
+    tmpfile="$(mktemp)"
+    mapfile -t pkglist < /var/cache/tap/pkglist
+    compgen -W '${pkglist[@]}' -- "${cur}" > "${tmpfile}"
+    mapfile -t COMPREPLY < "${tmpfile}"
+}
+
 _tap() {
-    base_commands=('install' 'update' 'upgrade' 'remove'
-                   'autoremove' 'search')
+    commands=('install' 'update' 'upgrade' 'remove' 'search' 'list')
+    help_opts=('--help')
+    upgrade_opts=('--apt-only' '--mpr-only')
+    remove_opts=('--purge' '--autoremove')
+    search_opts=('--rev-alpha' '--skip-less-pipe' '--apt-only' '--mpr-only' '--quiet' '--pkgname-only')
+    list_opts=("${search_opts[@]}" '--installed' '--upgradable')
 
-    accepts_args=('install' 'remove' 'search')
-    install_opts=('-h' '--help')
-    update_opts=('-h' '--help')
-    upgrade_opts=('-h' '--help')
-    remove_opts=('-h' '--help' '--purge')
-    autoremove_opts=('-h' '--help')
-    search_opts=('-h' '--help' '-R' '--rev-alpha'
-                 '-L' '--skip-less-pipe' '--apt-only' '--mpr-only'
-                 '-q' '--quiet' '--pkgname-only')
-    list_opts=('-h' '--help' '-R' '--rev-alpha'
-               '-L' '--skip-less-pipe' '--apt-only' '--mpr-only'
-               '-q' '--quiet' '--pkgname-only' '--installed'
-               '--upgradable')
+    local cur prev words cword
+    _init_completion || return
+    cmd="${words[1]}"
 
-    number_of_args="${#COMP_WORDS[@]}"
-    command="${COMP_WORDS[1]}"
-    cur="${COMP_WORDS[COMP_CWORD]}"
-    
-    # Process very first arg.
-    if [[ "${number_of_args}" == "2" ]]; then
-        mapfile -t COMPREPLY < <(printf '%s\n' "${base_commands[@]}" | grep "^${cur}" 2> /dev/null)
-        return
-    fi
+    case "${cmd}" in
+        install|remove|list)
+            case "${cur}" in
+                -*)
+                    cmd_opts="${cmd}_opts[@]"
+                    opts=("${!cmd_opts}" "${help_opts[@]}")
+                    _gen_compreply '${opts[@]}' "${cur}"
+                    return
+                    ;;
 
-    # Process command options (if it's a valid command).
-    valid_command=0
+                *)
+                    _pkglist_compreply
+                    return
+                    ;;
+            esac
+            ;;
 
-    for i in "${base_commands[@]}"; do
-        if [[ "${command}" == "${i}" ]]; then
-            valid_command=1
-            break
-        fi
-    done
+        update|upgrade|search)
+            cmd_opts="${cmd}_opts[@]"
+            opts=("${!cmd_opts}" "${help_opts[@]}")
+            _gen_compreply '${opts[@]}' "${cur}"
+            return
+            ;;
 
-    if ! (( "${valid_command}" )); then
-        COMPREPLY=()
-        return
-    fi
-    
-    opts="${command}_opts[@]"
-
-    mapfile -t COMPREPLY < <(printf '%s\n' "${!opts}" | grep "^${cur}" 2> /dev/null)
-    return
+        *)
+            _gen_compreply '${commands[@]}' "${cmd}"
+            return
+            ;;
+    esac
 }
 
 complete -F _tap tap

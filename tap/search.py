@@ -6,6 +6,7 @@ from tap.check_version import check_version
 from tap.colors import colors
 from tap.message import message
 from tap.run_loading_function import run_loading_function
+from tap.read_config import get_option
 
 
 def _get_apt_package_descriptions():
@@ -25,6 +26,11 @@ def _get_apt_package_descriptions():
             continue
 
         pkgbase = cfg.apt_depcache.get_candidate_ver(i)
+
+        # 'pkgbase' will be None for any deconfigured packages that don't have any other versions that the deconfigured one available.
+        if pkgbase is None:
+            continue
+
         cfg.apt_pkgrecords.lookup(pkgbase.file_list[0])
         pkgname = i.name
         pkgdesc = cfg.apt_pkgrecords.short_desc
@@ -66,6 +72,11 @@ def _get_description(pkgname):
             return None
 
         cache_version = cfg.apt_depcache.get_candidate_ver(cache_pkg)
+
+        # 'cache_version' will be None for any deconfigured packages that don't have any other versions that the deconfigured one available.
+        if cache_version is None:
+            return None
+
         cfg.apt_pkgrecords.lookup(cache_version.file_list[0])
         return cfg.apt_pkgrecords.short_desc
 
@@ -82,20 +93,13 @@ def _generate_results():
     packages = list(packages)
     packages.sort()
 
-    if ("--rev-alpha" in cfg.options) or (cfg.config_data["search"]["rev_alpha"]):
+    if get_option("sort", "rev_alpha"):
         packages.reverse()
 
     list_length = len(packages) - 1
 
     for index, pkgname in enumerate(packages):
-        if ("--pkgname-only" in cfg.options) or (
-            cfg.config_data[cfg.operation]["pkgname_only"]
-        ):
-            print(
-                "--pkgname-only" in cfg.options,
-                type(cfg.config_data[cfg.operation]["pkgname_only"]),
-            )
-            exit()
+        if get_option("filter", "pkgname_only"):
             results_string += f"{pkgname}\n"
             continue
 
@@ -148,7 +152,7 @@ def _print_results():
         results = _generate_results()
 
     if (len(results.splitlines()) > get_terminal_size().lines) and (
-        "--skip-less-pipe" not in cfg.options
+        not get_option("output", "skip_less_pipe")
     ):
         subprocess.run(["less", "-r"], input=results.encode())
     else:
@@ -157,12 +161,8 @@ def _print_results():
 
 def search():
     # Get list of package descriptions for packages in APT cache.
-    if ("--mpr-only" not in cfg.options) and (
-        not cfg.config_data["search"]["mpr_only"]
-    ):
-        if ("--pkgname-only" not in cfg.options) and (
-            not cfg.config_data[cfg.operation]["pkgname_only"]
-        ):
+    if not get_option("filter", "mpr_only"):
+        if not get_option("output", "quiet"):
             msg = message.info(
                 "Reading package descriptions...",
                 newline=False,
@@ -176,16 +176,12 @@ def search():
 
     # Search each provided package.
     for pkg in cfg.packages:
-        if ("--mpr-only" not in cfg.options) and (
-            not cfg.config_data["search"]["mpr_only"]
-        ):
+        if not get_option("filter", "mpr_only"):
             for apt_pkg in apt_package_descriptions:
                 if (pkg in apt_pkg) or (pkg in apt_package_descriptions[apt_pkg]):
                     cfg.apt_packages += [apt_pkg]
 
-        if ("--apt-only" not in cfg.options) and (
-            not cfg.config_data["search"]["apt_only"]
-        ):
+        if not get_option("filter", "apt_only"):
             # Search MPR packages.
             for mpr_pkg in cfg.mpr_cache.package_dicts:
                 pkgdesc = cfg.mpr_cache.package_dicts[mpr_pkg].description
